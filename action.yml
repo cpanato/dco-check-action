@@ -1,0 +1,72 @@
+# action.yml
+name: dco-checker
+author: cpanato
+description: 'Check for DCO in the commits for a PR'
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  repository:
+    description: 'The GitHub repository (onwer/repo)'
+    required: false
+    default: '${{ github.repository }}'
+  pull_request_number:
+    description: 'The pull request number that you want to check the commits'
+    required: false
+    default: '${{ github.event.number }}'
+  github_token:
+    description: 'GITHUB_TOKEN'
+    default: '${{ github.token }}'
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        gh pr diff ${ inputs.pull_request_number } --patch --repo ${ inputs.repository } > diff.patch
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+
+    - shell: bash
+      run: |
+        #!/usr/bin/env bash
+
+        patch_file=./diff.patch
+
+        signed_off_lines=$(grep -n '^Signed-off-by:' "${patch_file}")
+
+        # Check if the file exists
+        if [[ ! -f "${patch_file}" ]]; then
+          echo "Error: File '${patch_file}' not found."
+          exit 1
+        fi
+
+        signed_off_lines=$(grep -n '^Signed-off-by:' "${patch_file}")
+
+        # Check if any Signed-off-by line is missing
+        if [[ -z "${signed_off_lines}" ]]; then
+          echo "Error: No Signed-off-by line found in the patch file."
+          echo '### Error: No Signed-off-by line found.' >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+        # Verify that each commit has a Signed-off-by line
+        commit_count=$(grep -c '^From [0-9a-f]\{40\} ' "${patch_file}")
+        signed_off_count=$(echo "${signed_off_lines}" | wc -l)
+
+        if [[ "${commit_count}" -ne "${signed_off_count}" ]]; then
+          echo "Error: Not all commits have a Signed-off-by line."
+          echo '### Error: Not all commits have a Signed-off-by line.' >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+        # Print Signed-off-by lines
+        echo "${signed_off_lines}" | while IFS= read -r line; do
+          line_number=$(echo "${line}" | cut -d: -f1)
+          signed_off=$(echo "${line}" | cut -d: -f2-)
+          echo "Commit at line ${line_number}: ${signed_off}"
+          echo '### Commit at line ${line_number}: ${signed_off}' >> $GITHUB_STEP_SUMMARY
+        done
+
+        exit 0
