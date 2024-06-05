@@ -1,5 +1,5 @@
 # action.yml
-name: dco-checker
+name: dco-check-action
 author: cpanato
 description: 'Check for DCO in the commits for a PR'
 branding:
